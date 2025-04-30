@@ -1,0 +1,23 @@
+# Compiled binary
+sudoku_zkp
+
+# Object files
+*.o
+
+# Dependency files
+*.d
+
+# VS Code project settings (optional)
+.vscode/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Backup files
+*~
+*.swp
+.DS_Store
+
+# Makefile intermediate files
+*.out
