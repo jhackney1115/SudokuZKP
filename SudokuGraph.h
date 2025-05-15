@@ -39,7 +39,7 @@ public:
     void colorGraph(const std::vector<std::vector<int>> &answer);
     void commitColors();
     void setStartingBoard(const int board[9][9]);
-    bool respondToChallenge(const std::vector<std::pair<Cell, Cell>>& challenge) const;
+    bool respondToChallenge(const std::vector<std::pair<Cell, Cell>>& challenge, const std::unordered_map<int, int>& perm,  const std::unordered_map<Cell, std::string, CellHash>& roundNonces) const;
     bool verifyAndProve(const std::vector<std::vector<int>>& startingBoard,
                         const std::vector<std::vector<int>>& answer);
     bool isValidSudoku(const std::vector<std::vector<int>>& board);

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <random>
 #include <set>
+#include <unordered_map>
 
 using namespace std;
 
@@ -52,7 +53,7 @@ void SudokuGraph::setStartingBoard(const int board[9][9]) {
             startingBoard[i][j] = board[i][j];
 }
 
-bool SudokuGraph::respondToChallenge(const vector<pair<Cell, Cell>>& challenge) const {
+bool SudokuGraph::respondToChallenge(const vector<pair<Cell, Cell>>& challenge, const unordered_map<int, int>& perm,  const unordered_map<Cell, string, CellHash>& roundNonces) const {
     for (const auto& pair : challenge) {
         Cell cellA = pair.first;
         Cell cellB = pair.second;
@@ -60,36 +61,33 @@ bool SudokuGraph::respondToChallenge(const vector<pair<Cell, Cell>>& challenge) 
         int valueA = coloring.at(cellA);
         int valueB = coloring.at(cellB);
 
-        cout << cellA.first << " " << cellA.second << endl;
-        cout << cellB.first << " " << cellB.second << endl;
-        cout << valueA << " " << valueB << endl;
-        cout << endl;
+        int permA = perm.at(valueA);
+        int permB = perm.at(valueB);
 
-        string nonceA = commitments.at(cellA).nonce;
-        string nonceB = commitments.at(cellB).nonce;
+        string nonceA = roundNonces.at(cellA);
+        string nonceB = roundNonces.at(cellB);
 
-        string recomputedCommitmentA = hashCommitment(valueA, nonceA);
-        string recomputedCommitmentB = hashCommitment(valueB, nonceB);
+        string recomputedA = hashCommitment(permA, nonceA);
+        string recomputedB = hashCommitment(permB, nonceB);
 
-        if (recomputedCommitmentA != commitments.at(cellA).hash ||
-            recomputedCommitmentB != commitments.at(cellB).hash) {
+        if (recomputedA != commitments.at(cellA).hash ||
+            recomputedB != commitments.at(cellB).hash) {
             cout << "Commitment verification failed for pair: ("
-                 << cellA.first+1 << "," << cellA.second+1 << ") and ("
-                 << cellB.first+1 << "," << cellB.second+1 << ")\n";
+                 << cellA.first << "," << cellA.second << ") and ("
+                 << cellB.first << "," << cellB.second << ")\n";
             return false;
         }
 
-        if (valueA == valueB) {
-            cout << "Conflict found: same value in adjacent cells: ("
-                 << cellA.first+1 << "," << cellA.second+1 << ") = "
-                 << valueA << " and ("
-                 << cellB.first+1 << "," << cellB.second+1 << ") = "
-                 << valueB << "\n";
+        if (permA == permB) {
+            cout << "Conflict found: same permuted value in adjacent cells: ("
+                 << cellA.first << "," << cellA.second << ") = " << permA
+                 << " and (" << cellB.first << "," << cellB.second << ") = " << permB << "\n";
             return false;
         }
     }
     return true;
 }
+
 
 bool SudokuGraph::isValidSudoku(const vector<vector<int>>& board) {
     for (int i = 0; i < 9; ++i) {
@@ -125,11 +123,7 @@ bool SudokuGraph::isValidSudoku(const vector<vector<int>>& board) {
     return true;
 }
 
-bool SudokuGraph::verifyAndProve(const vector<vector<int>>&startingBoard, const vector<vector<int>>& answer) {
-    //Checks if set values from starting puzzle are changed.
-    //Still couldn't grasp how to do this without knowing the values
-    //or giving away valuable information that reveals info about the
-    //solution
+bool SudokuGraph::verifyAndProve(const vector<vector<int>>& startingBoard, const vector<vector<int>>& answer) {
     for (int i = 0; i < 9; ++i)
         for (int j = 0; j < 9; ++j) {
             this->startingBoard[i][j] = startingBoard[i][j];
@@ -141,20 +135,13 @@ bool SudokuGraph::verifyAndProve(const vector<vector<int>>&startingBoard, const 
             }
         }
 
-    /*if (!isValidSudoku(answer)) {
-        cerr << "Sudoku rule violation detected.\n";
-        return false;
-    }*/
-
     colorGraph(answer);
-    commitColors();
-    
-    // Loop multiple times for stronger ZKP simulation
+
     const int numRounds = 100;
     random_device rd;
     mt19937 g(rd());
 
-    //Generate all edges
+    // Precompute all edges
     vector<pair<Cell, Cell>> allEdges;
     for (const auto& pair : adjList) {
         Cell from = pair.first;
@@ -164,31 +151,29 @@ bool SudokuGraph::verifyAndProve(const vector<vector<int>>&startingBoard, const 
         }
     }
 
-    /*Cell Test1={0,1};
-    Cell Test2={0,2};
-    vector<pair<Cell, Cell>> Check;
-    Check.push_back({Test1, Test2});
-    if (!respondToChallenge(Check)) {
-            cerr << "ZKP challenge failed.\n";
-            return false;
-    }*/
-
-     for (int round = 0; round < numRounds; ++round) {
+    for (int round = 0; round < numRounds; ++round) {
         vector<pair<Cell, Cell>> challenge;
+        unordered_set<Cell, CellHash> involvedCells;
 
         // Structured challenge type: row, col, or box
-        int type = round % 3; // 0 = row, 1 = col, 2 = box
+        int type = round % 3;
         int index = g() % 9;
 
-        if (type == 0) { // row
+        if (type == 0) {
             for (int i = 0; i < 9; ++i)
-                for (int j = i + 1; j < 9; ++j)
+                for (int j = i + 1; j < 9; ++j) {
                     challenge.emplace_back(Cell{index, i}, Cell{index, j});
-        } else if (type == 1) { // column
+                    involvedCells.insert({index, i});
+                    involvedCells.insert({index, j});
+                }
+        } else if (type == 1) {
             for (int i = 0; i < 9; ++i)
-                for (int j = i + 1; j < 9; ++j)
+                for (int j = i + 1; j < 9; ++j) {
                     challenge.emplace_back(Cell{i, index}, Cell{j, index});
-        } else { // box
+                    involvedCells.insert({i, index});
+                    involvedCells.insert({j, index});
+                }
+        } else {
             int boxRow = (index / 3) * 3;
             int boxCol = (index % 3) * 3;
             vector<Cell> cells;
@@ -196,27 +181,41 @@ bool SudokuGraph::verifyAndProve(const vector<vector<int>>&startingBoard, const 
                 for (int j = 0; j < 3; ++j)
                     cells.emplace_back(Cell{boxRow + i, boxCol + j});
             for (size_t i = 0; i < cells.size(); ++i)
-                for (size_t j = i + 1; j < cells.size(); ++j)
+                for (size_t j = i + 1; j < cells.size(); ++j) {
                     challenge.emplace_back(cells[i], cells[j]);
+                    involvedCells.insert(cells[i]);
+                    involvedCells.insert(cells[j]);
+                }
         }
 
-        // Add 10 random pairs from full adjacency list as extra
-        //random checks
         shuffle(allEdges.begin(), allEdges.end(), g);
         for (int i = 0; i < 10 && i < allEdges.size(); ++i) {
             challenge.push_back(allEdges[i]);
+            involvedCells.insert(allEdges[i].first);
+            involvedCells.insert(allEdges[i].second);
         }
 
-        shuffle(challenge.begin(), challenge.end(), g);
-        if (challenge.size() > 20)
-            challenge.resize(20);
+        // Generate fresh permutation and per-round commitments
+        vector<int> permVec = {1,2,3,4,5,6,7,8,9};
+        shuffle(permVec.begin(), permVec.end(), g);
+        unordered_map<int, int> permutation;
+        for (int i = 1; i <= 9; ++i)
+            permutation[i] = permVec[i - 1];
 
-        if (!respondToChallenge(challenge)) {
+        unordered_map<Cell, string, CellHash> roundNonces;
+        for (const Cell& c : involvedCells) {
+            string nonce = to_string(g());
+            int permuted = permutation[coloring[c]];
+            string hashVal = hashCommitment(permuted, nonce);
+            commitments[c] = { hashVal, nonce };
+            roundNonces[c] = nonce;
+        }
+
+        if (!respondToChallenge(challenge, permutation, roundNonces)) {
             cerr << "ZKP challenge failed at round " << round + 1 << ".\n";
             return false;
         }
     }
 
-    
     return true;
 }
