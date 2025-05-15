@@ -124,6 +124,10 @@ bool SudokuGraph::isValidSudoku(const vector<vector<int>>& board) {
 }
 
 bool SudokuGraph::verifyAndProve(const vector<vector<int>>& startingBoard, const vector<vector<int>>& answer) {
+    //Checks if set values from starting puzzle are changed.
+    //Still couldn't grasp how to do this without knowing the values
+    //or giving away valuable information that reveals info about the
+    //solution
     for (int i = 0; i < 9; ++i)
         for (int j = 0; j < 9; ++j) {
             this->startingBoard[i][j] = startingBoard[i][j];
